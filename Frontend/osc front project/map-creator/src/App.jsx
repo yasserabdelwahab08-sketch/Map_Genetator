@@ -1,34 +1,34 @@
 import React, { useState } from "react";
-
 import Login from "./components/Login";
 import MapView from "./components/MapView";
 import MapCreator from "./components/MapCreator";
 import HomePage from "./components/HomePage";
+import api from "./api/axios"; // أو استخدام axios المباشر حسب إعدادك
 
 import "./App.css";
 
 function App() {
-  const [user, setUser] = useState(() => {
-    try {
-      const savedUser = localStorage.getItem("mapgen_user");
-      return savedUser ? JSON.parse(savedUser) : null;
-    } catch {
-      return null;
-    }
-  });
+  // حالة المستخدم (تعتمد على جلسة الكوكي بدلاً من local storage)
+  const [user, setUser] = useState(null);
 
   // التحكم في الصفحة الحالية: "home" | "view" | "creator" | "login"
   const [page, setPage] = useState("home");
 
   const handleLogin = (loggedUser) => {
     setUser(loggedUser);
-    setPage("view");
+    setPage("home");
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem("mapgen_user");
-    setUser(null);
-    setPage("home");
+  const handleLogout = async () => {
+    try {
+      // إرسال طلب للباك إند لمسح الـ HTTP-Only Cookie
+      await api.post("/auth/logout");
+    } catch (error) {
+      console.error("Logout error:", error);
+    } finally {
+      setUser(null);
+      setPage("home");
+    }
   };
 
   // 1. عرض صفحة تسجيل الدخول
@@ -36,7 +36,7 @@ function App() {
     return <Login onLogin={handleLogin} onBack={() => setPage("home")} />;
   }
 
-  // 2. عرض صفحة منشئ الخرائط (MapCreator)
+  // 2. عرض صفحة منشئ الخرائط (MapCreator) - يتطلب تسجيل الدخول فقط
   if (page === "creator") {
     if (!user) {
       setPage("login");
@@ -45,7 +45,7 @@ function App() {
     return <MapCreator onNavigate={setPage} onBack={() => setPage("home")} />;
   }
 
-  // 3. عرض صفحة استعراض الخرائط (MapView)
+  // 3. عرض صفحة استعراض الخرائط (MapView) - متاح للجميع بدون تسجيل دخول
   if (page === "view") {
     return (
       <MapView
@@ -62,7 +62,8 @@ function App() {
     <HomePage
       user={user}
       onNavigate={(targetPage) => {
-        if ((targetPage === "creator" || targetPage === "view") && !user) {
+        // حظر الوصول لصفحة المنشئ فقط لغير المسجلين، والسماح بالصفحات الأخرى للجميع
+        if (targetPage === "creator" && !user) {
           setPage("login");
         } else {
           setPage(targetPage);

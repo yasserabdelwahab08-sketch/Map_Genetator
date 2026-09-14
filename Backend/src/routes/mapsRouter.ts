@@ -1,11 +1,12 @@
-import { Router } from "express";
-import * as buildingMethods from "../controllers/mapController.js";
-import upload from "../middlewares/multer.js";
+import { Router } from 'express';
+import { getMapById, createMap, updateMap } from '../controllers/mapController';
+import { authMiddleware } from '../middlewares/auth';
 
-const buildingRouter = Router();
+const router = Router();
 
-buildingRouter.get("/", buildingMethods.getAllBuildings);
-buildingRouter.post("/", upload.array("images", 10), buildingMethods.createBuilding);
-buildingRouter.get("/:id", buildingMethods.getBuildingById);
+router.get('/:id', getMapById);
 
-export default buildingRouter;
+router.post('/', authMiddleware, createMap);
+router.put('/:id', authMiddleware, updateMap);
+
+export default router;
