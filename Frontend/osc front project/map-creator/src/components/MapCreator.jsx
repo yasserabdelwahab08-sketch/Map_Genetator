@@ -1,4 +1,5 @@
 import React, { useState, useRef } from "react";
+import axios from "axios";
 import {
   Plus,
   MapPin,
@@ -6,11 +7,8 @@ import {
   MousePointer,
   Layers,
   Trash2,
-  Download,
   Image as ImageIcon,
-  Building,
   X,
-  GitCommit,
   Link2,
 } from "lucide-react";
 
@@ -27,6 +25,7 @@ function MapCreator({ onNavigate }) {
   const [selectedNode, setSelectedNode] = useState(null);
   const [pathSourceNode, setPathSourceNode] = useState(null);
   const [isJsonModalOpen, setIsJsonModalOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   // New Floor Modal State
   const [isAddFloorOpen, setIsAddFloorOpen] = useState(false);
@@ -54,7 +53,7 @@ function MapCreator({ onNavigate }) {
       nodes: [],
     };
 
-    setFloors([...floors, newFloor]);
+    setFloors((prevFloors) => [...prevFloors, newFloor]);
     setActiveFloorId(newFloor.id);
     setNewFloorName("");
     setNewFloorImage(null);
@@ -161,13 +160,11 @@ function MapCreator({ onNavigate }) {
     }
   };
 
-  // التعامل مع إضافة وصلة بين دورين مختلفين (Stairs/Elevators)
   const handleAddCrossFloorLink = (e) => {
     e.preventDefault();
     if (!selectedNode || !targetFloorIdForLink || !targetNodeIdForLink) return;
 
     const updatedFloors = floors.map((floor) => {
-      // إضافة الوصلة للنود الحالية في الدور الحالي
       if (floor.id === activeFloor.id) {
         const updatedNodes = floor.nodes.map((n) => {
           if (n.id === selectedNode.id) {
@@ -189,7 +186,6 @@ function MapCreator({ onNavigate }) {
         return { ...floor, nodes: updatedNodes };
       }
 
-      // إضافة الوصلة العكسية للنود المستقبلة في الدور الآخر
       if (floor.id === targetFloorIdForLink) {
         const updatedNodes = floor.nodes.map((n) => {
           if (n.id === targetNodeIdForLink) {
@@ -215,6 +211,18 @@ function MapCreator({ onNavigate }) {
     });
 
     setFloors(updatedFloors);
+
+    setSelectedNode((prev) => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        adjacencyList: [
+          ...prev.adjacencyList,
+          { nodeId: targetNodeIdForLink, targetFloorId: targetFloorIdForLink, weight: 1 },
+        ],
+      };
+    });
+
     setIsCrossFloorModalOpen(false);
     setTargetFloorIdForLink("");
     setTargetNodeIdForLink("");
@@ -247,6 +255,24 @@ function MapCreator({ onNavigate }) {
       })),
       nodes: allNodes,
     };
+  };
+
+  const handleSaveMap = async () => {
+    try {
+      setIsSaving(true);
+      const mapData = getExportData();
+
+      // إرسال البيانات للباك إند
+      const response = await axios.post('/maps', mapData);
+
+      alert('تم حفظ الخريطة بنجاح!');
+      console.log('Saved map:', response.data);
+    } catch (error) {
+      console.error('Error saving map:', error);
+      alert('حدث خطأ أثناء حفظ الخريطة');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const otherFloors = floors.filter((f) => f.id !== activeFloorId);
@@ -300,8 +326,16 @@ function MapCreator({ onNavigate }) {
             <LanguageSwitcher />
             <button
               type="button"
+              onClick={handleSaveMap}
+              disabled={isSaving}
+              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition shadow-lg disabled:opacity-50"
+            >
+              {isSaving ? 'جاري الحفظ...' : 'حفظ الخريطة'}
+            </button>
+            <button
+              type="button"
               onClick={() => setIsJsonModalOpen(true)}
-              className="px-3 py-2 rounded-xl bg-emerald-500 text-slate-950 text-xs font-bold hover:bg-emerald-400 transition"
+              className="px-3 py-2 rounded-xl bg-slate-800 text-slate-200 border border-slate-700 text-xs font-bold hover:bg-slate-700 transition"
             >
               {t("previewExportJson")}
             </button>
@@ -391,7 +425,6 @@ function MapCreator({ onNavigate }) {
                 <svg className="absolute inset-0 w-full h-full pointer-events-none">
                   {activeFloor.nodes.map((node) =>
                     node.adjacencyList.map((adj) => {
-                      // إخفاء الوصلات التي تتجه لدور آخر من SVG العادي
                       if (adj.targetFloorId) return null;
                       const targetNode = activeFloor.nodes.find((n) => n.id === adj.nodeId);
                       if (!targetNode) return null;
@@ -538,18 +571,16 @@ function MapCreator({ onNavigate }) {
                   />
                 </div>
 
-                {/* زر التوصيل بدور آخر (Cross Floor Link) */}
                 {floors.length > 1 && (
                   <button
                     onClick={() => setIsCrossFloorModalOpen(true)}
                     className="w-full py-2 bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition"
                   >
                     <Link2 className="w-4 h-4" />
-                    ربط بدور آخر (سلم/أسانسير)
+                    {t("linkToAnotherFloor")}
                   </button>
                 )}
 
-                {/* Connected Paths List */}
                 <div className="flex-1 flex flex-col">
                   <span className="text-xs text-slate-500 block mb-2">
                     {t("connectedPaths")}
@@ -618,7 +649,7 @@ function MapCreator({ onNavigate }) {
             className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4"
           >
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold text-slate-200">ربط العقدة بدور آخر</h3>
+              <h3 className="text-lg font-bold text-slate-200">{t("linkToAnotherFloor")}</h3>
               <button
                 type="button"
                 onClick={() => setIsCrossFloorModalOpen(false)}
@@ -629,7 +660,7 @@ function MapCreator({ onNavigate }) {
             </div>
 
             <div>
-              <label className="text-xs text-slate-400 block mb-1">اختر الدور المستهدف</label>
+              <label className="text-xs text-slate-400 block mb-1">{t("selectTargetFloor")}</label>
               <select
                 required
                 value={targetFloorIdForLink}
@@ -639,7 +670,7 @@ function MapCreator({ onNavigate }) {
                 }}
                 className="w-full bg-slate-950 border border-slate-800 text-slate-200 px-3 py-2 rounded-xl text-xs outline-none focus:border-emerald-500"
               >
-                <option value="">اختر الدور...</option>
+                <option value="">{t("selectTargetFloorPlaceholder")}</option>
                 {otherFloors.map((f) => (
                   <option key={f.id} value={f.id}>
                     {f.name}
@@ -650,14 +681,14 @@ function MapCreator({ onNavigate }) {
 
             {targetFloorObj && (
               <div>
-                <label className="text-xs text-slate-400 block mb-1">اختر النقطة في الدور المستهدف</label>
+                <label className="text-xs text-slate-400 block mb-1">{t("selectTargetNode")}</label>
                 <select
                   required
                   value={targetNodeIdForLink}
                   onChange={(e) => setTargetNodeIdForLink(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 text-slate-200 px-3 py-2 rounded-xl text-xs outline-none focus:border-emerald-500"
                 >
-                  <option value="">اختر النقطة...</option>
+                  <option value="">{t("selectTargetNodePlaceholder")}</option>
                   {targetFloorObj.nodes.map((n) => (
                     <option key={n.id} value={n.id}>
                       {n.name}
@@ -673,21 +704,21 @@ function MapCreator({ onNavigate }) {
                 onClick={() => setIsCrossFloorModalOpen(false)}
                 className="px-4 py-2 bg-slate-800 text-slate-400 rounded-xl text-xs"
               >
-                إلغاء
+                {t("cancelAction")}
               </button>
               <button
                 type="submit"
                 disabled={!targetFloorIdForLink || !targetNodeIdForLink}
                 className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-semibold disabled:opacity-40"
               >
-                توصيل
+                {t("connect")}
               </button>
             </div>
           </form>
         </div>
       )}
 
-      {/* Add Floor Modal & JSON Modal Remained unchanged... */}
+      {/* Add Floor Modal */}
       {isAddFloorOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <form
@@ -755,6 +786,7 @@ function MapCreator({ onNavigate }) {
         </div>
       )}
 
+      {/* Export JSON Modal */}
       {isJsonModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl p-6 shadow-2xl flex flex-col gap-4">
